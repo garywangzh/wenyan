@@ -498,26 +498,29 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 #printArea{display:none}
 @media print{
   html,body{background:#fff !important}
-  body > *{display:none !important}
-  #printArea{display:block !important}
-  @page{margin:11mm 12mm}
+  body.print-mode > *:not(#printArea){display:none !important}
+  body.print-mode > #printArea{display:block !important}
+  @page{margin:8mm 9mm}
 }
-#printArea{font-family:var(--serif);color:#000}
-#printArea h2{font-size:14.5pt;font-weight:500;margin:0 0 1pt;letter-spacing:.06em}
-#printArea .p-meta{font-size:8pt;color:#555;letter-spacing:.08em;margin-bottom:4pt}
-#printArea .p-name{font-size:9pt;color:#333;letter-spacing:.06em;margin:0 0 5pt;border-bottom:1px solid #bbb;padding-bottom:3pt}
-#printArea p{font-size:10.5pt;line-height:1.7;margin:0 0 2pt;text-align:justify;text-indent:0}
+#printArea{font-family:"SimSun","宋体","Songti SC",serif;color:#000;-webkit-print-color-adjust:exact}
+#printArea h2{font-size:14pt;font-weight:600;margin:0 0 2pt;letter-spacing:.04em;
+  break-after:avoid;page-break-after:avoid}
+#printArea .p-meta{font-size:8.5pt;color:#555;letter-spacing:.05em;margin-bottom:2.4pt}
+#printArea .p-meta,#printArea .p-name{break-after:avoid;page-break-after:avoid}
+#printArea .p-art > p:first-of-type{break-before:avoid;page-break-before:avoid}
+#printArea .p-name{font-size:9.5pt;color:#333;letter-spacing:.04em;margin:0 0 3pt;border-bottom:1px solid #ccc;padding-bottom:2pt}
+#printArea p{font-size:12pt;line-height:1.5;margin:0 0 2pt;text-align:justify;text-indent:0}
 #printArea .pblank{display:inline-block;min-width:2.2em;border-bottom:1px solid #000;margin:0 2px}
 #printArea .pw{font-weight:600}
 #printArea .pline{display:inline-block;border-bottom:1px solid #000;margin:0 2px 0 1px;height:.6em;vertical-align:baseline}
 #printArea .pfill b{font-weight:600}
 #printArea .pfill i{font-style:normal;font-size:8.5pt;color:#555;margin-left:1pt}
 #printArea .ppat{font-size:8.5pt;color:#444;border:1px solid #999;border-radius:2pt;padding:0 2pt;margin:0 1pt;white-space:nowrap}
-#printArea .p-art{break-after:page;page-break-after:always}
-#printArea .p-art:last-child{break-after:auto;page-break-after:auto}
+#printArea .p-art{break-after:auto;page-break-after:auto;margin-bottom:6mm}
+#printArea .p-art:last-child{margin-bottom:0}
 #printArea ol.p-list{margin:0;padding-left:0;list-style:none;columns:3;column-gap:6mm;
   column-rule:1px solid #e2e2e2;counter-reset:plist}
-#printArea ol.p-list li{position:relative;padding-left:1.6em;font-size:9.5pt;line-height:1.45;margin-bottom:1pt;
+#printArea ol.p-list li{position:relative;padding-left:1.6em;font-size:10.5pt;line-height:1.45;margin-bottom:1pt;
   break-inside:avoid;page-break-inside:avoid;counter-increment:plist}
 #printArea ol.p-list li::before{content:counter(plist);position:absolute;left:0;top:.05em;width:1.3em;
   text-align:right;font-size:8pt;color:#9a9a9a;font-variant-numeric:tabular-nums}
@@ -2372,6 +2375,22 @@ const FAV = {
     W.innerHTML = html;
     return W;
   }
+  function expPrintCss(){
+    const css = [...document.querySelectorAll('style')].map(x => x.textContent).join('\n');
+    const rules = css.match(/#printArea[^{}]*\{[^{}]*\}|@page\s*\{[^{}]*\}/g) || [];
+    return 'html,body{background:#fff;margin:0}#printArea{display:block}\n' + rules.join('\n');
+  }
+  function expDocHtml(){
+    const w = expBuild();
+    if (!w) return '';
+    const title = '文言挖空练习';
+    const tag = (n, c) => '<' + (c ? '/' : '') + n + '>';   // 源码里不出现完整标签，避免截断 script
+    return ['<!doctype html>', tag('html lang="zh-CN"'), tag('head'), tag('meta charset="utf-8"'),
+      tag('title'), title, tag('title', 1), tag('style'), expPrintCss(), tag('style', 1),
+      tag('head', 1), tag('body'), tag('div id="printArea"'), w.innerHTML,
+      tag('div', 1), tag('body', 1), tag('html', 1)].join('');
+  }
+  window.__expDocHtml = expDocHtml;
   window.__expBuild = expBuild;
   const expBtn = $('#expBtn');
   if (expBtn) expBtn.onclick = () => { expBuildList(); $('#expModal').classList.add('on'); };
@@ -2385,11 +2404,38 @@ const FAV = {
   if (expNone) expNone.onclick = () => document.querySelectorAll('#expArts input').forEach(x => x.checked = false);
   const expGo = $('#expGo');
   if (expGo) expGo.onclick = () => {
+    const html = expDocHtml();
+    if (!html) return;
+    $('#expModal').classList.remove('on');
+    let nw = null;
+    try { nw = window.open('', '_blank'); } catch(e){ nw = null; }
+    if (nw && nw.document){
+      nw.document.open();
+      nw.document.write(html);
+      nw.document.close();
+      try { nw.focus(); } catch(e){}
+      const fire = () => setTimeout(() => { try { nw.print(); } catch(e){} }, 250);
+      if (nw.document.readyState === 'complete') fire();
+      else nw.onload = fire;
+      return;
+    }
+    // 弹窗被拦：退回本页打印
     const w = expBuild();
     if (!w) return;
+    document.body.classList.add('print-mode');
     document.body.appendChild(w);
-    $('#expModal').classList.remove('on');
-    setTimeout(() => { window.print(); setTimeout(() => w.remove(), 1000); }, 150);
+    let cleared = false;
+    const cleanup = () => {
+      if (cleared) return;
+      cleared = true;
+      document.body.classList.remove('print-mode');
+      w.remove();
+    };
+    setTimeout(() => {
+      try { window.addEventListener('afterprint', cleanup, { once: true }); } catch(e){}
+      window.print();
+      setTimeout(cleanup, 60000);
+    }, 200);
   };
 
   /* 光标柔光（桌面端，轻简模式自动关闭） */
